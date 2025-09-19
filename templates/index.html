@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RTTM Label Tool</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/static/style.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <h1 class="mb-4">RTTM Label Tool</h1>
+
+        <!-- Folder Paths Configuration -->
+        <div class="card mb-4" id="folder-config-card">
+            <div class="card-header">
+                <i class="fas fa-folder me-2"></i> Configure Folders
+            </div>
+            <div class="card-body">
+                <form id="folder-config-form">
+                    <div class="row">
+                        <div class="col-md-5">
+                            <div class="mb-2">
+                                <label for="rttm-folder" class="form-label">RTTM Folder Path</label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" id="rttm-folder" value="{{ rttm_dir }}" placeholder="Path to RTTM files">
+                                    <button class="btn btn-outline-secondary" type="button" id="browse-rttm-btn">
+                                        <i class="fas fa-folder-open"></i> Browse
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-5">
+                            <div class="mb-2">
+                                <label for="audio-folder" class="form-label">Audio Folder Path</label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" id="audio-folder" value="{{ audio_dir }}" placeholder="Path to audio files">
+                                    <button class="btn btn-outline-secondary" type="button" id="browse-audio-btn">
+                                        <i class="fas fa-folder-open"></i> Browse
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-2 d-flex align-items-end">
+                            <button type="submit" class="btn btn-primary w-100 mb-2">
+                                <i class="fas fa-sync-alt me-2"></i> Update Paths
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <i class="fas fa-file-alt me-2"></i> Select RTTM File
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="category-select" class="form-label">Category</label>
+                            <select id="category-select" class="form-select">
+                                <option value="all">All Categories</option>
+                                {% for category in categories %}
+                                <option value="{{ category }}">{{ category }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="rttm-file-select" class="form-label">RTTM File</label>
+                            <select id="rttm-file-select" class="form-select">
+                                <option value="">-- Select RTTM File --</option>
+                                {% for file in rttm_files %}
+                                <option value="{{ file }}" data-category="{{ file.split('/')[0] if '/' in file else 'root' }}">{{ file }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div id="saved-edits-container" class="mb-3" style="display: none;">
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle me-2"></i> Previously saved edits found!
+                                <div><small>Last modified: <span id="last-modified-time"></span></small></div>
+                                <div class="form-check mt-2">
+                                    <input class="form-check-input" type="checkbox" id="use-saved-edits" checked>
+                                    <label class="form-check-label" for="use-saved-edits">
+                                        Load from saved edits
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <button id="load-rttm-btn" class="btn btn-primary">
+                            <i class="fas fa-upload me-2"></i> Load File
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <i class="fas fa-info-circle me-2"></i> Current File
+                    </div>
+                    <div class="card-body">
+                        <p id="current-file">No file loaded</p>
+                        <div class="path-info mb-3" style="display: none;">
+                            <small class="text-muted">
+                                <strong>RTTM Path:</strong> <span id="current-rttm-path" class="folder-path"></span>
+                            </small><br>
+                            <small class="text-muted">
+                                <strong>Audio Path:</strong> <span id="current-audio-path" class="folder-path"></span>
+                            </small>
+                        </div>
+                        <div id="full-audio-player" class="mt-3 mb-3" style="display: none;">
+                            <label class="form-label"><i class="fas fa-music me-2"></i> Full Audio:</label>
+                            <audio id="full-audio" controls class="w-100"></audio>
+                        </div>
+                        <button id="save-all-btn" class="btn btn-success" disabled>
+                            <i class="fas fa-save me-2"></i> Save All Labels
+                        </button>
+                        <div id="save-status" class="alert alert-success save-status mt-3" role="alert"></div>
+                        <div class="mt-3">
+                            <small class="text-muted">
+                                <i class="fas fa-info-circle me-1"></i> Note: Consecutive segments with the same speaker and a gap ≤ 0.5s are automatically merged.
+                            </small>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <i class="fas fa-question-circle me-2"></i> Help
+                    </div>
+                    <div class="card-body">
+                        <p><strong>Columns explanation:</strong></p>
+                        <ul>
+                            <li><strong>Speaker ID:</strong> Identifier for the speaker (S01, S02, etc.)</li>
+                            <li><strong>Start Time (s):</strong> When the speech segment begins (in seconds)</li>
+                            <li><strong>Duration (s):</strong> How long the segment lasts (in seconds)</li>
+                            <li><strong>End Time (s):</strong> When the segment ends (Start Time + Duration)</li>
+                            <li><strong>Actions:</strong> 
+                                <ul>
+                                    <li><i class="fas fa-play"></i> - Play segment audio</li>
+                                    <li><i class="fas fa-search"></i> - Seek to position in full audio</li>
+                                    <li><i class="fas fa-edit"></i> - Edit segment</li>
+                                    <li><i class="fas fa-trash"></i> - Delete segment</li>
+                                </ul>
+                            </li>
+                        </ul>
+                        <p><strong>Instructions:</strong></p>
+                        <ul>
+                            <li>Click on any row to edit that segment</li>
+                            <li>Use the full audio player to check gaps between segments</li>
+                            <li>Only one audio will play at a time (segment or full)</li>
+                            <li>To add a new segment, click the "Add Segment" button</li>
+                            <li>After making changes, click "Update Segment"</li>
+                            <li>Delete unwanted segments with the trash icon</li>
+                            <li>When finished, click "Save All Labels" to save your work</li>
+                            <li>To continue editing from a previous session, select the RTTM file and choose "Load from saved edits" when prompted</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <i class="fas fa-keyboard me-2"></i> Keyboard Shortcuts
+                    </div>
+                    <div class="card-body">
+                        <ul class="list-group">
+                            <li class="list-group-item"><kbd>↑</kbd> / <kbd>↓</kbd> Navigate between segments</li>
+                            <li class="list-group-item"><kbd>Space</kbd> Play/pause current segment</li>
+                            <li class="list-group-item"><kbd>Enter</kbd> Edit selected segment</li>
+                            <li class="list-group-item"><kbd>Esc</kbd> Cancel editing</li>
+                            <li class="list-group-item"><kbd>Delete</kbd> Delete selected segment</li>
+                            <li class="list-group-item"><kbd>F</kbd> Focus on full audio player</li>
+                            <li class="list-group-item"><kbd>N</kbd> Add new segment</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-8">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="fas fa-list me-2"></i> Segments
+                            </div>
+                            <div class="d-flex align-items-center">
+                                <button id="add-segment-btn" class="btn btn-success btn-sm me-3" disabled>
+                                    <i class="fas fa-plus me-1"></i> Add Segment
+                                </button>
+                                <div class="input-group" style="width: 250px;">
+                                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                                    <input type="text" class="form-control" id="segment-search" placeholder="Search speaker ID...">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="segments-container">
+                            <p id="no-segments-msg" class="p-3">No segments loaded.</p>
+                            <div id="segments-list"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="edit-panel" class="card">
+                    <div class="card-header">
+                        <i class="fas fa-edit me-2"></i> Edit Segment
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label">Start Time (seconds)</label>
+                                <input type="number" class="form-control" id="edit-start-time" step="0.01">
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label">Duration (seconds)</label>
+                                <input type="number" class="form-control" id="edit-duration" step="0.01">
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label">End Time (seconds)</label>
+                                <input type="number" class="form-control" id="edit-end-time" step="0.01">
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label">Speaker ID</label>
+                                <input type="text" class="form-control" id="edit-speaker-id">
+                            </div>
+                        </div>
+                        
+                        <div class="audio-controls">
+                            <audio id="segment-audio" controls></audio>
+                        </div>
+                        
+                        <div class="mt-3">
+                            <button id="update-segment-btn" class="btn btn-primary">
+                                <i class="fas fa-check me-2"></i> Update Segment
+                            </button>
+                            <button id="cancel-edit-btn" class="btn btn-secondary">
+                                <i class="fas fa-times me-2"></i> Cancel
+                            </button>
+                            <button id="delete-segment-btn" class="btn btn-danger float-end">
+                                <i class="fas fa-trash me-2"></i> Delete Segment
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        window.currentFileId = null;
+        window.currentRttmPath = null;
+        window.segments = [];
+        window.currentSegmentIndex = -1;
+        window.currentPlayingAudio = null; // Track currently playing audio
+        
+        // Ensure the globals are also accessible via their normal names
+        var currentFileId = window.currentFileId;
+        var currentRttmPath = window.currentRttmPath;
+        var segments = window.segments;
+        var currentSegmentIndex = window.currentSegmentIndex;
+        var currentPlayingAudio = window.currentPlayingAudio;
+        
+        // Display segments function - needed by add-segment.js
+        function displaySegments() {
+            console.log("displaySegments called");
+            if (segments.length === 0) {
+                document.getElementById('no-segments-msg').style.display = 'block';
+                document.getElementById('segments-list').innerHTML = '';
+                return;
+            }
+
+            document.getElementById('no-segments-msg').style.display = 'none';
+            document.getElementById('segments-list').innerHTML = '';
+            
+            // Add header row
+            const headerRow = document.createElement('div');
+            headerRow.className = 'header-row';
+            headerRow.innerHTML = `
+                <div class="row">
+                    <div class="col-2"><strong>Speaker ID</strong></div>
+                    <div class="col-2"><strong>Start Time (s)</strong></div>
+                    <div class="col-2"><strong>Duration (s)</strong></div>
+                    <div class="col-2"><strong>End Time (s)</strong></div>
+                    <div class="col-4 text-center"><strong>Actions</strong></div>
+                </div>
+            `;
+            document.getElementById('segments-list').appendChild(headerRow);
+
+            segments.forEach((segment, index) => {
+                const segmentRow = document.createElement('div');
+                segmentRow.className = 'segment-row';
+                segmentRow.setAttribute('data-index', index);
+                segmentRow.innerHTML = `
+                    <div class="row">
+                        <div class="col-2">${segment.speaker_id}</div>
+                        <div class="col-2">${segment.start_time.toFixed(2)}</div>
+                        <div class="col-2">${segment.duration.toFixed(2)}</div>
+                        <div class="col-2">${segment.end_time.toFixed(2)}</div>
+                        <div class="col-4 text-center">
+                            <button class="btn btn-sm btn-outline-primary play-btn me-1" data-index="${index}" title="Play segment">
+                                <i class="fas fa-play"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-info seek-btn me-1" data-time="${segment.start_time}" title="Seek to position in full audio">
+                                <i class="fas fa-search"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-warning edit-btn me-1" data-index="${index}" title="Edit segment">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger delete-row-btn" data-index="${index}" title="Delete segment">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('segments-list').appendChild(segmentRow);
+            });
+            
+            // Add click and button event handlers
+            addSegmentEventHandlers();
+        }
+        
+        // Make the function globally accessible
+        window.displaySegments = displaySegments;
+        
+        // Function to add event handlers to segment rows and buttons
+        function addSegmentEventHandlers() {
+            // Add click event to select segment for editing
+            document.querySelectorAll('.segment-row').forEach(row => {
+                row.addEventListener('click', function(e) {
+                    // Don't select when buttons are clicked
+                    if (e.target.classList.contains('btn') || e.target.closest('.btn')) {
+                        return;
+                    }
+                    const index = parseInt(this.getAttribute('data-index'));
+                    selectSegment(index);
+                });
+            });
+
+            // Add button event listeners
+            document.querySelectorAll('.play-btn').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const index = parseInt(this.getAttribute('data-index'));
+                    playSegment(index);
+                });
+            });
+            
+            document.querySelectorAll('.seek-btn').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const time = parseFloat(this.getAttribute('data-time'));
+                    
+                    // Pause segment audio if playing
+                    if (document.getElementById('segment-audio') && !document.getElementById('segment-audio').paused) {
+                        document.getElementById('segment-audio').pause();
+                    }
+                    
+                    // Set time and play full audio
+                    const fullAudio = document.getElementById('full-audio');
+                    fullAudio.currentTime = time;
+                    fullAudio.play();
+                    currentPlayingAudio = fullAudio;
+                });
+            });
+            
+            document.querySelectorAll('.edit-btn').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const index = parseInt(this.getAttribute('data-index'));
+                    selectSegment(index);
+                });
+            });
+            
+            document.querySelectorAll('.delete-row-btn').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const index = parseInt(this.getAttribute('data-index'));
+                    
+                    if (confirm('Are you sure you want to delete this segment?')) {
+                        // Remove the segment from the array
+                        segments.splice(index, 1);
+                        
+                        // Refresh segments display
+                        displaySegments();
+                        
+                        // Hide edit panel if open
+                        if (currentSegmentIndex === index) {
+                            document.getElementById('edit-panel').style.display = 'none';
+                            currentSegmentIndex = -1;
+                        }
+                    }
+                });
+            });
+        }
+        
+        // Utility function to show notifications - needed by add-segment.js
+        function showNotification(message, type = 'success') {
+            const notification = document.createElement('div');
+            notification.className = `alert alert-${type} notification`;
+            notification.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} me-2"></i> ${message}`;
+            
+            document.body.appendChild(notification);
+            
+            // Add active class to trigger animation
+            setTimeout(() => {
+                notification.classList.add('active');
+            }, 10);
+            
+            // Remove after 3 seconds
+            setTimeout(() => {
+                notification.classList.remove('active');
+                setTimeout(() => {
+                    document.body.removeChild(notification);
+                }, 300);
+            }, 3000);
+        }
+        
+        // Make the function globally accessible
+        window.showNotification = showNotification;
+        
+        // Function to select a segment for editing
+        function selectSegment(index) {
+            console.log("selectSegment called with index:", index);
+            
+            // Remove active class from all segments
+            document.querySelectorAll('.segment-row').forEach(row => {
+                row.classList.remove('active');
+            });
+
+            // Add active class to selected segment
+            const selectedRow = document.querySelector(`.segment-row[data-index="${index}"]`);
+            if (selectedRow) {
+                selectedRow.classList.add('active');
+                
+                // Scroll to make selected row visible if needed
+                selectedRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+
+            window.currentSegmentIndex = index;
+            currentSegmentIndex = index;
+            
+            const segment = segments[index];
+            console.log("Segment data:", segment);
+
+            // Populate edit form - use either direct DOM access or window references
+            const editStartTime = document.getElementById('edit-start-time') || window.editStartTime;
+            const editDuration = document.getElementById('edit-duration') || window.editDuration;
+            const editEndTime = document.getElementById('edit-end-time') || window.editEndTime;
+            const editSpeakerId = document.getElementById('edit-speaker-id') || window.editSpeakerId;
+            const editPanel = document.getElementById('edit-panel') || window.editPanel;
+
+            console.log("Edit form elements:", {
+                editStartTime: !!editStartTime,
+                editDuration: !!editDuration,
+                editEndTime: !!editEndTime,
+                editSpeakerId: !!editSpeakerId,
+                editPanel: !!editPanel
+            });
+
+            if (editStartTime) editStartTime.value = segment.start_time.toFixed(2);
+            if (editDuration) editDuration.value = segment.duration.toFixed(2);
+            if (editEndTime) editEndTime.value = segment.end_time.toFixed(2);
+            if (editSpeakerId) editSpeakerId.value = segment.speaker_id;
+
+            // Show edit panel
+            if (editPanel) editPanel.style.display = 'block';
+
+            // Load audio for this segment
+            playSegment(index);
+        }
+        
+        // Make the function globally accessible
+        window.selectSegment = selectSegment;
+        
+        // Function to play a segment's audio
+        function playSegment(index) {
+            console.log("playSegment called with index:", index);
+            const segment = segments[index];
+            
+            // Pause any currently playing audio before fetching new segment
+            const fullAudio = document.getElementById('full-audio') || window.fullAudio;
+            if (fullAudio && !fullAudio.paused) {
+                fullAudio.pause();
+            }
+            
+            console.log("Fetching segment audio for:", {
+                file_id: currentFileId,
+                start_time: segment.start_time,
+                duration: segment.duration,
+                rttm_path: currentRttmPath
+            });
+            
+            fetch('/get_segment', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    file_id: currentFileId,
+                    start_time: segment.start_time,
+                    duration: segment.duration,
+                    rttm_path: currentRttmPath
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log("Segment audio response:", data);
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
+
+                // Set audio source and play
+                const segmentAudio = document.getElementById('segment-audio') || window.segmentAudio;
+                console.log("Segment audio element exists:", !!segmentAudio);
+                
+                if (segmentAudio) {
+                    segmentAudio.src = data.segment_url;
+                    segmentAudio.load();
+                    segmentAudio.play();
+                    window.currentPlayingAudio = segmentAudio;
+                    currentPlayingAudio = segmentAudio;
+                } else {
+                    console.error("Could not find segment-audio element!");
+                }
+            })
+            .catch(error => {
+                console.error('Error playing segment:', error);
+                alert('Error playing segment');
+            });
+        }
+        
+        // Make the function globally accessible
+        window.playSegment = playSegment;
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            const categorySelect = document.getElementById('category-select');
+            const rttmSelect = document.getElementById('rttm-file-select');
+            const loadRttmBtn = document.getElementById('load-rttm-btn');
+            const currentFileDisplay = document.getElementById('current-file');
+            const segmentsContainer = document.getElementById('segments-container');
+            const segmentsList = document.getElementById('segments-list');
+            const noSegmentsMsg = document.getElementById('no-segments-msg');
+            const editPanel = document.getElementById('edit-panel');
+            const editStartTime = document.getElementById('edit-start-time');
+            const editDuration = document.getElementById('edit-duration');
+            const editSpeakerId = document.getElementById('edit-speaker-id');
+            const segmentAudio = document.getElementById('segment-audio');
+            const updateSegmentBtn = document.getElementById('update-segment-btn');
+            const cancelEditBtn = document.getElementById('cancel-edit-btn');
+            const saveAllBtn = document.getElementById('save-all-btn');
+            const saveStatus = document.getElementById('save-status');
+            const segmentSearch = document.getElementById('segment-search');
+            const fullAudio = document.getElementById('full-audio');
+            const editEndTime = document.getElementById('edit-end-time');
+            const savedEditsContainer = document.getElementById('saved-edits-container');
+            const useSavedEditsCheckbox = document.getElementById('use-saved-edits');
+            const lastModifiedTimeSpan = document.getElementById('last-modified-time');
+            
+            // Store DOM references for use in global functions
+            function storeGlobalDomReferences() {
+                console.log("Storing global DOM references");
+                window.segmentsContainer = segmentsContainer;
+                window.segmentsList = segmentsList;
+                window.noSegmentsMsg = noSegmentsMsg;
+                window.editPanel = editPanel;
+                window.editStartTime = editStartTime;
+                window.editDuration = editDuration;
+                window.editSpeakerId = editSpeakerId;
+                window.segmentAudio = segmentAudio;
+                window.updateSegmentBtn = updateSegmentBtn;
+                window.cancelEditBtn = cancelEditBtn;
+                window.saveAllBtn = saveAllBtn;
+                window.saveStatus = saveStatus;
+                window.segmentSearch = segmentSearch;
+                window.fullAudio = fullAudio;
+                window.editEndTime = editEndTime;
+                window.savedEditsContainer = savedEditsContainer;
+                window.useSavedEditsCheckbox = useSavedEditsCheckbox;
+                window.lastModifiedTimeSpan = lastModifiedTimeSpan;
+            }
+            
+            // Call this function to store DOM references globally
+            storeGlobalDomReferences();
+            
+            // Hide edit panel initially
+            editPanel.style.display = 'none';
+            
+            // Handle audio playback exclusivity - only one audio can play at a time
+            function setupAudioExclusivity() {
+                // When segment audio starts playing, pause full audio
+                segmentAudio.addEventListener('play', function() {
+                    if (fullAudio && !fullAudio.paused) {
+                        fullAudio.pause();
+                    }
+                    currentPlayingAudio = segmentAudio;
+                    
+                    // Visual indicator
+                    segmentAudio.parentElement.classList.add('audio-playing');
+                    fullAudio.parentElement.classList.remove('audio-playing');
+                });
+                
+                // When segment audio pauses or ends
+                segmentAudio.addEventListener('pause', function() {
+                    segmentAudio.parentElement.classList.remove('audio-playing');
+                });
+                
+                segmentAudio.addEventListener('ended', function() {
+                    segmentAudio.parentElement.classList.remove('audio-playing');
+                });
+                
+                // When full audio starts playing, pause segment audio
+                fullAudio.addEventListener('play', function() {
+                    if (segmentAudio && !segmentAudio.paused) {
+                        segmentAudio.pause();
+                    }
+                    currentPlayingAudio = fullAudio;
+                    
+                    // Visual indicator
+                    fullAudio.parentElement.classList.add('audio-playing');
+                    segmentAudio.parentElement.classList.remove('audio-playing');
+                });
+                
+                // When full audio pauses or ends
+                fullAudio.addEventListener('pause', function() {
+                    fullAudio.parentElement.classList.remove('audio-playing');
+                });
+                
+                fullAudio.addEventListener('ended', function() {
+                    fullAudio.parentElement.classList.remove('audio-playing');
+                });
+            }
+            
+            // Setup audio exclusivity
+            setupAudioExclusivity();
+            
+            // Setup automatic time field calculations
+            setupTimeFieldCalculations();
+            
+            // Handle automatic time field calculations
+            function setupTimeFieldCalculations() {
+                // When start time changes, update end time based on duration
+                editStartTime.addEventListener('input', function() {
+                    if (!isNaN(parseFloat(this.value)) && !isNaN(parseFloat(editDuration.value))) {
+                        const startTime = parseFloat(this.value);
+                        const duration = parseFloat(editDuration.value);
+                        editEndTime.value = (startTime + duration).toFixed(2);
+                    }
+                });
+                
+                // When duration changes, update end time based on start time
+                editDuration.addEventListener('input', function() {
+                    if (!isNaN(parseFloat(this.value)) && !isNaN(parseFloat(editStartTime.value))) {
+                        const startTime = parseFloat(editStartTime.value);
+                        const duration = parseFloat(this.value);
+                        editEndTime.value = (startTime + duration).toFixed(2);
+                    }
+                });
+                
+                // When end time changes, update duration based on start time
+                editEndTime.addEventListener('input', function() {
+                    if (!isNaN(parseFloat(this.value)) && !isNaN(parseFloat(editStartTime.value))) {
+                        const startTime = parseFloat(editStartTime.value);
+                        const endTime = parseFloat(this.value);
+                        editDuration.value = (endTime - startTime).toFixed(2);
+                    }
+                });
+            }
+            
+            // Filter RTTM files by category
+            categorySelect.addEventListener('change', function() {
+                const selectedCategory = this.value;
+                const options = rttmSelect.options;
+                
+                for (let i = 0; i < options.length; i++) {
+                    const option = options[i];
+                    if (i === 0 || selectedCategory === 'all' || option.dataset.category === selectedCategory) {
+                        option.style.display = '';
+                    } else {
+                        option.style.display = 'none';
+                    }
+                }
+                
+                // Reset selection if the current selection is now hidden
+                if (rttmSelect.selectedIndex > 0 && rttmSelect.options[rttmSelect.selectedIndex].style.display === 'none') {
+                    rttmSelect.selectedIndex = 0;
+                }
+            });
+            
+            // Check for saved edits when an RTTM file is selected
+            rttmSelect.addEventListener('change', function() {
+                const selectedFile = this.value;
+                
+                // Hide saved edits container by default
+                savedEditsContainer.style.display = 'none';
+                
+                if (!selectedFile) {
+                    return;
+                }
+                
+                // Check if saved edits exist for this file
+                const formData = new FormData();
+                formData.append('rttm_file', selectedFile);
+                
+                fetch('/check_saved_edits', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        console.error(data.error);
+                        return;
+                    }
+                    
+                    if (data.has_saved_edits) {
+                        // Show saved edits option
+                        savedEditsContainer.style.display = 'block';
+                        lastModifiedTimeSpan.textContent = data.last_modified;
+                        useSavedEditsCheckbox.checked = true;
+                    } else {
+                        // Hide saved edits option
+                        savedEditsContainer.style.display = 'none';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking for saved edits:', error);
+                });
+            });
+
+            // Search segments
+            segmentSearch.addEventListener('input', function() {
+                const searchText = this.value.toLowerCase();
+                const rows = document.querySelectorAll('.segment-row');
+                
+                rows.forEach(row => {
+                    const speakerId = row.querySelector('.col-2').textContent.toLowerCase();
+                    if (speakerId.includes(searchText) || searchText === '') {
+                        row.style.display = '';
+                    } else {
+                        row.style.display = 'none';
+                    }
+                });
+            });
+
+            // Load RTTM file
+            loadRttmBtn.addEventListener('click', function() {
+                const selectedFile = rttmSelect.value;
+                if (!selectedFile) {
+                    alert('Please select an RTTM file');
+                    return;
+                }
+
+                const formData = new FormData();
+                formData.append('rttm_file', selectedFile);
+                
+                // Check if user wants to load from saved edits
+                const useSaved = savedEditsContainer.style.display !== 'none' && useSavedEditsCheckbox.checked;
+                formData.append('use_saved', useSaved.toString());
+
+                fetch('/load_rttm', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                        return;
+                    }
+
+                    // Update global variables
+                    window.currentFileId = data.file_id;
+                    currentFileId = data.file_id;
+                    
+                    window.currentRttmPath = selectedFile;
+                    currentRttmPath = selectedFile;
+                    
+                    window.segments = data.segments;
+                    segments = data.segments;
+                    
+                    // Show which source we loaded from
+                    const sourceType = data.source_type === 'saved' ? 'saved edits' : 'original file';
+                    currentFileDisplay.textContent = `File: ${selectedFile} (${currentFileId}) - Loaded from ${sourceType}`;
+                    
+                    // Show paths information
+                    document.querySelector('.path-info').style.display = 'block';
+                    document.getElementById('current-rttm-path').textContent = data.rttm_dir || '(Not available)';
+                    document.getElementById('current-audio-path').textContent = data.audio_dir || '(Not available)';
+                    
+                    // Sort segments by start time
+                    segments.sort((a, b) => a.start_time - b.start_time);
+                    
+                    // Display segments
+                    displaySegments();
+                    
+                    // Enable save button
+                    saveAllBtn.disabled = false;
+                    
+                    // Enable add segment button
+                    document.getElementById('add-segment-btn').disabled = false;
+                    
+                    // Clear search
+                    segmentSearch.value = '';
+                    
+                    // Load full audio
+                    const fullAudioPlayer = document.getElementById('full-audio-player');
+                    const fullAudio = document.getElementById('full-audio');
+                    fullAudioPlayer.style.display = 'block';
+                    
+                    // Determine audio path based on RTTM path
+                    const rttmDir = currentRttmPath.includes('/') ? currentRttmPath.substring(0, currentRttmPath.lastIndexOf('/')) : '';
+                    const audioPath = rttmDir ? `/audio/${rttmDir}/${currentFileId}.wav` : `/audio/${currentFileId}.wav`;
+                    
+                    fullAudio.src = audioPath;
+                    fullAudio.load();
+                })
+                .catch(error => {
+                    console.error('Error loading RTTM file:', error);
+                    alert('Error loading RTTM file');
+                });
+            });
+
+            // Display segments
+            function displaySegmentsOld() {
+                // This function is now defined globally
+                displaySegments();
+            }
+
+            // These functions have been moved to the global scope
+            // Use the global versions of selectSegment and playSegment
+            
+            // Store DOM references are set by storeGlobalDomReferences() function
+
+            // Update segment
+            updateSegmentBtn.addEventListener('click', function() {
+                if (currentSegmentIndex === -1) return;
+
+                const startTime = parseFloat(editStartTime.value);
+                const duration = parseFloat(editDuration.value);
+                const endTime = parseFloat(editEndTime.value);
+                const speakerId = editSpeakerId.value;
+
+                // Validate inputs
+                if (isNaN(startTime) || isNaN(duration) || isNaN(endTime) || !speakerId) {
+                    alert('Please enter valid values for all fields');
+                    return;
+                }
+                
+                // Validate that end time matches start time + duration
+                if (Math.abs((startTime + duration) - endTime) > 0.01) {
+                    // If end time doesn't match calculated end time, ask user which to prioritize
+                    const userChoice = confirm(
+                        `The end time (${endTime.toFixed(2)}) doesn't match start time + duration (${(startTime + duration).toFixed(2)}).\n\n` +
+                        `Click OK to use end time (and recalculate duration).\n` +
+                        `Click Cancel to use duration (and recalculate end time).`
+                    );
+                    
+                    if (userChoice) {
+                        // User chose to prioritize end time, recalculate duration
+                        duration = endTime - startTime;
+                        editDuration.value = duration.toFixed(2);
+                    } else {
+                        // User chose to prioritize duration, recalculate end time
+                        endTime = startTime + duration;
+                        editEndTime.value = endTime.toFixed(2);
+                    }
+                }
+
+                // Update segment data
+                segments[currentSegmentIndex].start_time = startTime;
+                segments[currentSegmentIndex].duration = duration;
+                segments[currentSegmentIndex].end_time = startTime + duration;
+                segments[currentSegmentIndex].speaker_id = speakerId;
+
+                // Refresh segments display
+                displaySegments();
+                
+                // Hide edit panel
+                editPanel.style.display = 'none';
+                currentSegmentIndex = -1;
+            });
+
+            // Cancel edit
+            cancelEditBtn.addEventListener('click', function() {
+                editPanel.style.display = 'none';
+                currentSegmentIndex = -1;
+                
+                // Remove active class from all segments
+                document.querySelectorAll('.segment-row').forEach(row => {
+                    row.classList.remove('active');
+                });
+            });
+            
+            // Delete segment
+            const deleteSegmentBtn = document.getElementById('delete-segment-btn');
+            deleteSegmentBtn.addEventListener('click', function() {
+                if (currentSegmentIndex === -1) return;
+                
+                if (confirm('Are you sure you want to delete this segment?')) {
+                    // Remove the segment from the array
+                    segments.splice(currentSegmentIndex, 1);
+                    
+                    // Refresh segments display
+                    displaySegments();
+                    
+                    // Hide edit panel
+                    editPanel.style.display = 'none';
+                    currentSegmentIndex = -1;
+                }
+            });
+
+            // Save all labels
+            saveAllBtn.addEventListener('click', function() {
+                if (!currentFileId || segments.length === 0) {
+                    alert('No file loaded or no segments to save');
+                    return;
+                }
+
+                fetch('/save_labels', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        file_id: currentFileId,
+                        segments: segments,
+                        rttm_path: currentRttmPath
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                        return;
+                    }
+
+                    // Show success message
+                    saveStatus.textContent = data.message;
+                    saveStatus.style.display = 'block';
+                    
+                    // Hide message after 3 seconds
+                    setTimeout(() => {
+                        saveStatus.style.display = 'none';
+                    }, 3000);
+                })
+                .catch(error => {
+                    console.error('Error saving labels:', error);
+                    alert('Error saving labels');
+                });
+            });
+            
+            // Keyboard navigation
+            document.addEventListener('keydown', function(e) {
+                // Only handle keyboard shortcuts if segments are loaded
+                if (segments.length === 0) return;
+                
+                // Don't handle shortcuts when typing in input fields
+                if (e.target.tagName === 'INPUT') return;
+                
+                switch(e.key) {
+                    case 'ArrowUp':
+                        e.preventDefault();
+                        if (currentSegmentIndex > 0) {
+                            selectSegment(currentSegmentIndex - 1);
+                        }
+                        break;
+                    case 'ArrowDown':
+                        e.preventDefault();
+                        if (currentSegmentIndex < segments.length - 1) {
+                            selectSegment(currentSegmentIndex + 1);
+                        } else if (currentSegmentIndex === -1 && segments.length > 0) {
+                            selectSegment(0);
+                        }
+                        break;
+                    case ' ':
+                        e.preventDefault();
+                        if (currentSegmentIndex !== -1) {
+                            if (segmentAudio.paused) {
+                                segmentAudio.play();
+                            } else {
+                                segmentAudio.pause();
+                            }
+                        }
+                        break;
+                    case 'Enter':
+                        if (currentSegmentIndex !== -1 && editPanel.style.display === 'none') {
+                            selectSegment(currentSegmentIndex);
+                        }
+                        break;
+                    case 'Escape':
+                        if (editPanel.style.display !== 'none') {
+                            cancelEditBtn.click();
+                        }
+                        break;
+                    case 'Delete':
+                        if (currentSegmentIndex !== -1) {
+                            // Trigger delete button click
+                            if (editPanel.style.display !== 'none') {
+                                deleteSegmentBtn.click();
+                            } else {
+                                const deleteRowBtn = document.querySelector(`.delete-row-btn[data-index="${currentSegmentIndex}"]`);
+                                if (deleteRowBtn) {
+                                    deleteRowBtn.click();
+                                }
+                            }
+                        }
+                        break;
+                    case 'f':
+                    case 'F':
+                        e.preventDefault();
+                        // Focus on full audio player
+                        const fullAudio = document.getElementById('full-audio');
+                        fullAudio.focus();
+                        break;
+                    case 'n':
+                    case 'N':
+                        e.preventDefault();
+                        // Only trigger if add-segment-btn is enabled
+                        const addSegmentBtn = document.getElementById('add-segment-btn');
+                        if (!addSegmentBtn.disabled) {
+                            addSegmentBtn.click();
+                        }
+                        break;
+                }
+            });
+        });
+    </script>
+    
+    <!-- Add Segment Modal -->
+    <div id="add-segment-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5><i class="fas fa-plus-circle me-2"></i> Add New Segment</h5>
+                <button type="button" class="close" id="close-add-segment-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-3 mb-3">
+                        <label class="form-label">Start Time (seconds)</label>
+                        <input type="number" class="form-control" id="new-start-time" step="0.01" min="0">
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label class="form-label">Duration (seconds)</label>
+                        <input type="number" class="form-control" id="new-duration" step="0.01" min="0.01">
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label class="form-label">End Time (seconds)</label>
+                        <input type="number" class="form-control" id="new-end-time" step="0.01" min="0.01">
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label class="form-label">Speaker ID</label>
+                        <input type="text" class="form-control" id="new-speaker-id" placeholder="e.g., S01">
+                    </div>
+                </div>
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i> Tips:
+                    <ul class="mb-0 mt-1">
+                        <li>You can set either Duration or End Time - the other will be calculated automatically</li>
+                        <li>Start Time can be set by clicking "Set From Current Position" if you have the full audio playing</li>
+                        <li>New segments will be sorted by start time after adding</li>
+                    </ul>
+                </div>
+                <div class="d-flex justify-content-between mt-3">
+                    <button id="set-position-btn" class="btn btn-info">
+                        <i class="fas fa-map-marker-alt me-2"></i> Set From Current Position
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="cancel-add-segment-btn">Cancel</button>
+                <button type="button" class="btn btn-primary" id="save-new-segment-btn">Add Segment</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Hidden file inputs for directory browsing -->
+    <input type="file" id="folder-browser-rttm" webkitdirectory directory style="display: none;">
+    <input type="file" id="folder-browser-audio" webkitdirectory directory style="display: none;">
+    
+    <!-- JavaScript files -->
+    <script src="/static/add-segment.js"></script>
+    <script src="/static/folder-config.js"></script>
+</body>
+</html>
