@@ -27,16 +27,38 @@ AUDIO_DIR = DEFAULT_AUDIO_DIR
 os.makedirs(TEMP_DIR, exist_ok=True)
 os.makedirs(LABELS_DIR, exist_ok=True)
 
-# Clean up old temporary files (older than 1 hour)
-def cleanup_temp_files():
-    current_time = time.time()
-    for file in os.listdir(TEMP_DIR):
-        file_path = os.path.join(TEMP_DIR, file)
-        if os.path.isfile(file_path) and (current_time - os.path.getmtime(file_path)) > 3600:
-            try:
-                os.remove(file_path)
-            except:
-                pass
+# Clean up temporary files
+def cleanup_temp_files(older_than_seconds=3600):
+    """
+    Delete temporary files from TEMP_DIR.
+    If older_than_seconds is None, delete all files regardless of age.
+    If older_than_seconds is a number, only delete files older than that many seconds.
+    """
+    try:
+        file_count = 0
+        current_time = time.time()
+        
+        if not os.path.exists(TEMP_DIR):
+            app.logger.warning(f"Temp directory does not exist: {TEMP_DIR}")
+            return
+            
+        for file in os.listdir(TEMP_DIR):
+            file_path = os.path.join(TEMP_DIR, file)
+            if os.path.isfile(file_path):
+                # If older_than_seconds is None, delete all files
+                # Otherwise, only delete files older than the specified time
+                if older_than_seconds is None or (current_time - os.path.getmtime(file_path)) > older_than_seconds:
+                    try:
+                        os.remove(file_path)
+                        file_count += 1
+                        app.logger.debug(f"Deleted temp file: {file_path}")
+                    except Exception as e:
+                        app.logger.error(f"Error deleting temp file {file_path}: {str(e)}")
+        
+        app.logger.info(f"Cleaned up {file_count} temporary files from {TEMP_DIR}")
+    except Exception as e:
+        app.logger.error(f"Error during cleanup of temp files: {str(e)}")
+        app.logger.error(traceback.format_exc())
 
 # RTTM format: SPEAKER file_id channel start_time duration <NA> <NA> speaker_id <NA> <NA>
 def parse_rttm(rttm_path):
@@ -156,8 +178,8 @@ def check_saved_edits():
 @app.route('/')
 def index():
     try:
-        # Clean up old temporary files
-        cleanup_temp_files()
+        # Clean up old temporary files (older than 1 hour)
+        cleanup_temp_files(3600)
         
         # Get list of RTTM files from all subdirectories
         rttm_files = []
@@ -304,6 +326,10 @@ def update_paths():
 @app.route('/load_rttm', methods=['POST'])
 def load_rttm():
     try:
+        # Clean up all temporary files when loading a new RTTM file
+        app.logger.info("Cleaning up temporary files before loading new RTTM file")
+        cleanup_temp_files(None)  # None means delete all files regardless of age
+        
         rttm_file = request.form.get('rttm_file')
         use_saved = request.form.get('use_saved', 'false').lower() == 'true'
         
