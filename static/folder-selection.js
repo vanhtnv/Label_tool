@@ -8,7 +8,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const rttmFileSelect = document.getElementById('rttm-file-select');
 
     rttmFolderInput.addEventListener('change', function(event) {
-        const folderPath = event.target.files[0]?.webkitRelativePath.split('/')[0];
+        const relativePath = event.target.files[0]?.webkitRelativePath;
+        const folderPath = relativePath ? PathUtils.getFirstDir(relativePath) : null;
         if (folderPath) {
             console.log('Selected RTTM folder:', folderPath);
             sendFolderPathToBackend('rttm', folderPath);
@@ -16,7 +17,8 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     audioFolderInput.addEventListener('change', function(event) {
-        const folderPath = event.target.files[0]?.webkitRelativePath.split('/')[0];
+        const relativePath = event.target.files[0]?.webkitRelativePath;
+        const folderPath = relativePath ? PathUtils.getFirstDir(relativePath) : null;
         if (folderPath) {
             console.log('Selected Audio folder:', folderPath);
             sendFolderPathToBackend('audio', folderPath);
@@ -69,8 +71,10 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     confirmButton.addEventListener('click', function() {
-        const rttmFolder = overlayRttmInput.files[0]?.webkitRelativePath.split('/')[0];
-        const audioFolder = overlayAudioInput.files[0]?.webkitRelativePath.split('/')[0];
+        const rttmRelativePath = overlayRttmInput.files[0]?.webkitRelativePath;
+        const audioRelativePath = overlayAudioInput.files[0]?.webkitRelativePath;
+        const rttmFolder = rttmRelativePath ? PathUtils.getFirstDir(rttmRelativePath) : null;
+        const audioFolder = audioRelativePath ? PathUtils.getFirstDir(audioRelativePath) : null;
 
         if (!rttmFolder || !audioFolder) {
             alert('Please select both RTTM and Audio folders.');

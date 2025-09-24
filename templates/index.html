@@ -72,8 +72,8 @@
                             <label for="rttm-file-select" class="form-label">RTTM File</label>
                             <select id="rttm-file-select" class="form-select">
                                 <option value="">-- Select RTTM File --</option>
-                                {% for file in rttm_files %}
-                                <option value="{{ file }}" data-category="{{ file.split('/')[0] if '/' in file else 'root' }}">{{ file }}</option>
+                                {% for file_info in rttm_files_with_category %}
+                                <option value="{{ file_info.path }}" data-category="{{ file_info.category }}">{{ file_info.path }}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -1082,6 +1082,7 @@
     <input type="file" id="folder-browser-audio" webkitdirectory directory style="display: none;">
     
     <!-- JavaScript files -->
+    <script src="/static/path-utils.js"></script>
     <script src="/static/add-segment.js"></script>
     <script src="/static/folder-config.js"></script>
 </body>

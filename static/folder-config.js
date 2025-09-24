@@ -28,7 +28,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Set up advanced browse functionality for RTTM folder
     if (browseRttmBtn) {
         browseRttmBtn.addEventListener('click', function() {
-            const currentPath = rttmFolderInput && rttmFolderInput.value ? rttmFolderInput.value.trim() : '/';
+            const currentPath = rttmFolderInput && rttmFolderInput.value ? rttmFolderInput.value.trim() : PathUtils.getDefaultRoot();
             openBrowserDialog(currentPath, 'rttm-browser');
         });
     }
@@ -36,7 +36,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Set up advanced browse functionality for Audio folder
     if (browseAudioBtn) {
         browseAudioBtn.addEventListener('click', function() {
-            const currentPath = audioFolderInput && audioFolderInput.value ? audioFolderInput.value.trim() : '/';
+            const currentPath = audioFolderInput && audioFolderInput.value ? audioFolderInput.value.trim() : PathUtils.getDefaultRoot();
             openBrowserDialog(currentPath, 'audio-browser');
         });
     }
@@ -99,15 +99,15 @@ document.addEventListener('DOMContentLoaded', function() {
         if (event.target.files.length > 0) {
             // Get the directory path from the first file
             const path = event.target.files[0].webkitRelativePath;
-            const folderPath = path.split('/')[0];
+            const folderPath = PathUtils.getFirstDir(path);
             
             // Get current path without the last segment
             const currentPath = rttmFolderInput.value;
-            const pathParts = currentPath.split('/');
+            const pathParts = PathUtils.split(currentPath);
             pathParts.pop(); // Remove last segment
             
             // Build the full path
-            const fullPath = pathParts.join('/') + '/' + folderPath;
+            const fullPath = PathUtils.join(...pathParts, folderPath);
             
             // Update the input
             rttmFolderInput.value = fullPath;
@@ -122,15 +122,15 @@ document.addEventListener('DOMContentLoaded', function() {
         if (event.target.files.length > 0) {
             // Get the directory path from the first file
             const path = event.target.files[0].webkitRelativePath;
-            const folderPath = path.split('/')[0];
+            const folderPath = PathUtils.getFirstDir(path);
             
             // Get current path without the last segment
             const currentPath = audioFolderInput.value;
-            const pathParts = currentPath.split('/');
+            const pathParts = PathUtils.split(currentPath);
             pathParts.pop(); // Remove last segment
             
             // Build the full path
-            const fullPath = pathParts.join('/') + '/' + folderPath;
+            const fullPath = PathUtils.join(...pathParts, folderPath);
             
             // Update the input
             audioFolderInput.value = fullPath;
@@ -202,7 +202,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 option.value = file;
                 
                 // Set data-category attribute
-                const parts = file.split('/');
+                const parts = PathUtils.split(file);
                 const category = parts.length > 1 ? parts[0] : 'root';
                 option.setAttribute('data-category', category);
                 

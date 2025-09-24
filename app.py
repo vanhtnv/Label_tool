@@ -14,10 +14,10 @@ app = Flask(__name__)
 
 # Configuration
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DEFAULT_RTTM_DIR = os.path.join(BASE_DIR, "combined_dataset/rttm")
-DEFAULT_AUDIO_DIR = os.path.join(BASE_DIR, "combined_dataset/preprocessed")
-LABELS_DIR = os.path.join(BASE_DIR, "combined_dataset/labels_diarization")
-TEMP_DIR = os.path.join(BASE_DIR, "label_tool/static/temp")
+DEFAULT_RTTM_DIR = os.path.join(BASE_DIR, "combined_dataset", "rttm")
+DEFAULT_AUDIO_DIR = os.path.join(BASE_DIR, "combined_dataset", "preprocessed")
+LABELS_DIR = os.path.join(BASE_DIR, "combined_dataset", "labels_diarization")
+TEMP_DIR = os.path.join(BASE_DIR, "label_tool", "static", "temp")
 
 # Current paths that can be changed via the UI
 RTTM_DIR = DEFAULT_RTTM_DIR
@@ -183,30 +183,35 @@ def index():
         
         # Get list of RTTM files from all subdirectories
         rttm_files = []
+        rttm_files_with_category = []
         for root, dirs, files in os.walk(RTTM_DIR):
             for file in files:
                 if file.endswith('.rttm'):
                     # Get relative path from RTTM_DIR
                     rel_path = os.path.relpath(os.path.join(root, file), RTTM_DIR)
                     rttm_files.append(rel_path)
+                    
+                    # Extract category for easier template handling
+                    parts = rel_path.split(os.sep)
+                    category = parts[0] if len(parts) > 1 else "root"
+                    rttm_files_with_category.append({
+                        'path': rel_path,
+                        'category': category
+                    })
         
         # Sort files for better display
         rttm_files.sort()
+        rttm_files_with_category.sort(key=lambda x: x['path'])
         
         # Get the categories (subdirectories)
         categories = set()
-        for file_path in rttm_files:
-            # Extract the top-level directory
-            parts = file_path.split(os.sep)
-            if len(parts) > 1:
-                categories.add(parts[0])
-            else:
-                categories.add("root")
+        for file_info in rttm_files_with_category:
+            categories.add(file_info['category'])
         
         categories = sorted(list(categories))
         
-        return render_template('index.html', rttm_files=rttm_files, categories=categories, 
-                              rttm_dir=RTTM_DIR, audio_dir=AUDIO_DIR)
+        return render_template('index.html', rttm_files=rttm_files, rttm_files_with_category=rttm_files_with_category, 
+                              categories=categories, rttm_dir=RTTM_DIR, audio_dir=AUDIO_DIR)
     except Exception as e:
         app.logger.error(f"Error in index route: {str(e)}")
         app.logger.error(traceback.format_exc())
@@ -248,7 +253,7 @@ def get_segment():
         # Extract the segment
         extract_audio_segment(audio_path, float(start_time), float(duration), temp_path)
         
-        # Generate a URL for the segment
+        # Generate a URL for the segment (always use forward slashes for URLs)
         segment_url = url_for('static', filename=f"temp/{temp_filename}")
         
         return jsonify({'segment_url': segment_url})
@@ -380,11 +385,15 @@ def load_rttm():
                 return jsonify({'error': f'Audio file not found at {audio_path}'}), 404
         
         # Return the segments and file information
+        # Convert backslashes to forward slashes for URL paths
+        audio_url_path = rttm_dir.replace('\\', '/') if rttm_dir else ''
+        audio_url = f"/audio/{audio_url_path}/{file_id}.wav" if audio_url_path else f"/audio/{file_id}.wav"
+        
         return jsonify({
             'segments': segments,
             'file_id': file_id,
             'rttm_path': rttm_file,
-            'audio_path': f"/audio/{rttm_dir}/{file_id}.wav" if rttm_dir else f"/audio/{file_id}.wav",
+            'audio_path': audio_url,
             'source_type': source_type,
             'rttm_dir': RTTM_DIR,
             'audio_dir': AUDIO_DIR
@@ -408,7 +417,9 @@ def serve_audio(filepath):
 @app.route('/get_directories', methods=['POST'])
 def get_directories():
     try:
-        base_path = request.form.get('base_path', '/')
+        # Use appropriate root path for the OS
+        default_path = 'C:\\' if os.name == 'nt' else '/'
+        base_path = request.form.get('base_path', default_path)
         
         # Validate base path exists
         if not os.path.isdir(base_path):
@@ -443,7 +454,9 @@ def get_directories():
 def browse_dialog():
     """Render a file browser dialog"""
     try:
-        start_path = request.args.get('start_path', '/')
+        # Use appropriate root path for the OS
+        default_path = 'C:\\' if os.name == 'nt' else '/'
+        start_path = request.args.get('start_path', default_path)
         dialog_id = request.args.get('dialog_id', 'file-browser')
         
         return render_template('browser.html', start_path=start_path, dialog_id=dialog_id)

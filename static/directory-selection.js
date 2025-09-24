@@ -119,7 +119,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     option.value = file;
                     
                     // Extract category from file path
-                    const parts = file.split('/');
+                    const parts = PathUtils.split(file);
                     const category = parts.length > 1 ? parts[0] : 'root';
                     
                     option.dataset.category = category;

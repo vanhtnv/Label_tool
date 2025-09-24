@@ -83,6 +83,7 @@
         </div>
     </div>
     
+    <script src="/static/path-utils.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             // Get DOM elements with null checks
@@ -232,7 +233,9 @@
                         `;
                         
                         parentItem.addEventListener('click', function() {
-                            const parentPath = currentPath.split('/').slice(0, -1).join('/') || '/';
+                            const pathParts = PathUtils.split(currentPath);
+                            pathParts.pop(); // Remove last segment
+                            const parentPath = pathParts.length > 0 ? PathUtils.join(...pathParts) : PathUtils.getDefaultRoot();
                             loadDirectory(parentPath);
                         });
                         
@@ -293,15 +296,17 @@
                 // Make sure root is not active and has a link
                 if (pathBreadcrumb.firstChild) {
                     pathBreadcrumb.firstChild.classList.remove('active');
-                    pathBreadcrumb.firstChild.innerHTML = '<a href="#" data-path="/">Root</a>';
+                    const rootPath = PathUtils.getDefaultRoot();
+                    pathBreadcrumb.firstChild.innerHTML = `<a href="#" data-path="${rootPath}">Root</a>`;
                 }
                 
                 // Add path segments
-                const segments = path.split('/').filter(Boolean);
-                let currentSegmentPath = '';
+                const segments = PathUtils.split(path);
+                let pathParts = [];
                 
                 segments.forEach((segment, index) => {
-                    currentSegmentPath += '/' + segment;
+                    pathParts.push(segment);
+                    const currentSegmentPath = PathUtils.join(...pathParts);
                     
                     const breadcrumbItem = document.createElement('li');
                     breadcrumbItem.className = 'breadcrumb-item';
