@@ -811,9 +811,8 @@
                     const fullAudio = document.getElementById('full-audio');
                     fullAudioPlayer.style.display = 'block';
                     
-                    // Determine audio path based on RTTM path
-                    const rttmDir = currentRttmPath.includes('/') ? currentRttmPath.substring(0, currentRttmPath.lastIndexOf('/')) : '';
-                    const audioPath = rttmDir ? `/audio/${rttmDir}/${currentFileId}.wav` : `/audio/${currentFileId}.wav`;
+                    // Use the audio path returned by the backend instead of constructing it
+                    const audioPath = data.audio_path;
                     
                     fullAudio.src = audioPath;
                     fullAudio.load();

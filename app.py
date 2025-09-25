@@ -6,18 +6,18 @@ from flask import Flask, render_template, request, jsonify, send_from_directory,
 import soundfile as sf
 import numpy as np
 import json
-import librosa
+# import librosa  # Disabled due to Windows DLL issues
 import glob
 from datetime import datetime
 
 app = Flask(__name__)
 
 # Configuration
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DEFAULT_RTTM_DIR = os.path.join(BASE_DIR, "combined_dataset/rttm")
-DEFAULT_AUDIO_DIR = os.path.join(BASE_DIR, "combined_dataset/preprocessed")
-LABELS_DIR = os.path.join(BASE_DIR, "combined_dataset/labels_diarization")
-TEMP_DIR = os.path.join(BASE_DIR, "label_tool/static/temp")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_RTTM_DIR = os.path.join(BASE_DIR, "combine_dataset", "rttm")
+DEFAULT_AUDIO_DIR = os.path.join(BASE_DIR, "combine_dataset", "preprocessed")
+LABELS_DIR = os.path.join(BASE_DIR, "combine_dataset", "labels_diarization")
+TEMP_DIR = os.path.join(BASE_DIR, "static", "temp")
 
 # Current paths that can be changed via the UI
 RTTM_DIR = DEFAULT_RTTM_DIR
@@ -127,8 +127,17 @@ def write_rttm(segments, output_path, file_id):
 
 def extract_audio_segment(audio_path, start_time, duration, output_path):
     try:
-        # Load the audio file
-        y, sr = librosa.load(audio_path, sr=None, offset=start_time, duration=duration)
+        # Read the full audio file with soundfile
+        with sf.SoundFile(audio_path) as audio_file:
+            sr = audio_file.samplerate
+            start_frame = int(start_time * sr)
+            frames_to_read = int(duration * sr)
+            
+            # Seek to start position
+            audio_file.seek(start_frame)
+            
+            # Read the segment
+            y = audio_file.read(frames_to_read)
         
         # Write the segment to the output path
         sf.write(output_path, y, sr)
@@ -196,8 +205,9 @@ def index():
         # Get the categories (subdirectories)
         categories = set()
         for file_path in rttm_files:
-            # Extract the top-level directory
-            parts = file_path.split(os.sep)
+            # Extract the top-level directory - normalize path separators for cross-platform compatibility
+            normalized_path = file_path.replace('\\', '/').replace('/', os.sep)
+            parts = normalized_path.split(os.sep)
             if len(parts) > 1:
                 categories.add(parts[0])
             else:
@@ -227,6 +237,8 @@ def get_segment():
         # Parse RTTM path to determine audio file location
         if rttm_path:
             rttm_dir = os.path.dirname(rttm_path)
+            # Normalize path separators for Windows compatibility
+            rttm_dir = rttm_dir.replace('/', os.sep).replace('\\', os.sep)
             # Try to find audio file in the same subdirectory structure
             audio_path = os.path.join(AUDIO_DIR, rttm_dir, f"{file_id}.wav")
             
@@ -304,8 +316,9 @@ def update_paths():
         # Get the categories (subdirectories)
         categories = set()
         for file_path in rttm_files:
-            # Extract the top-level directory
-            parts = file_path.split(os.sep)
+            # Extract the top-level directory - normalize path separators for cross-platform compatibility
+            normalized_path = file_path.replace('\\', '/').replace('/', os.sep)
+            parts = normalized_path.split(os.sep)
             if len(parts) > 1:
                 categories.add(parts[0])
             else:
@@ -343,6 +356,9 @@ def load_rttm():
         file_id = os.path.basename(rttm_file).replace('.rttm', '')
         rttm_dir = os.path.dirname(rttm_file)
         
+        # Debug logging
+        app.logger.info(f"Loading RTTM: rttm_file={rttm_file}, file_id={file_id}, rttm_dir='{rttm_dir}'")
+        
         # Determine which RTTM file to load based on user choice
         if use_saved:
             # Construct path to saved RTTM file
@@ -369,22 +385,31 @@ def load_rttm():
             return jsonify({'error': 'No segments found in RTTM file'}), 400
         
         # Try to find audio file in the same subdirectory structure
-        audio_path = os.path.join(AUDIO_DIR, rttm_dir, f"{file_id}.wav")
-        
-        # If not found, try the root of AUDIO_DIR (for backward compatibility)
-        if not os.path.exists(audio_path):
+        if rttm_dir:
+            audio_path = os.path.join(AUDIO_DIR, rttm_dir, f"{file_id}.wav")
+            audio_url_path = f"/audio/{rttm_dir.replace(os.sep, '/')}/{file_id}.wav"
+        else:
             audio_path = os.path.join(AUDIO_DIR, f"{file_id}.wav")
+            audio_url_path = f"/audio/{file_id}.wav"
+        
+        # If not found in subdirectory, try the root of AUDIO_DIR (for backward compatibility)
+        if not os.path.exists(audio_path) and rttm_dir:
+            audio_path = os.path.join(AUDIO_DIR, f"{file_id}.wav")
+            audio_url_path = f"/audio/{file_id}.wav"
             
-            # If still not found, return error
-            if not os.path.exists(audio_path):
-                return jsonify({'error': f'Audio file not found at {audio_path}'}), 404
+        # If still not found, return error
+        if not os.path.exists(audio_path):
+            app.logger.error(f'Audio file not found. Tried: {audio_path}')
+            return jsonify({'error': f'Audio file not found at {audio_path}'}), 404
+        
+        app.logger.info(f"Audio file found at: {audio_path}, URL path: {audio_url_path}")
         
         # Return the segments and file information
         return jsonify({
             'segments': segments,
             'file_id': file_id,
             'rttm_path': rttm_file,
-            'audio_path': f"/audio/{rttm_dir}/{file_id}.wav" if rttm_dir else f"/audio/{file_id}.wav",
+            'audio_path': audio_url_path,
             'source_type': source_type,
             'rttm_dir': RTTM_DIR,
             'audio_dir': AUDIO_DIR
@@ -397,9 +422,28 @@ def load_rttm():
 @app.route('/audio/<path:filepath>')
 def serve_audio(filepath):
     try:
+        # Handle Windows path separators in filepath
+        filepath = filepath.replace('/', os.sep)
+        
         # Split the path into directory and filename
         directory, filename = os.path.split(filepath)
-        return send_from_directory(os.path.join(AUDIO_DIR, directory), filename)
+        
+        # Construct the full path to the audio file
+        if directory:
+            full_audio_path = os.path.join(AUDIO_DIR, directory, filename)
+        else:
+            full_audio_path = os.path.join(AUDIO_DIR, filename)
+        
+        # Check if file exists
+        if os.path.exists(full_audio_path):
+            if directory:
+                return send_from_directory(os.path.join(AUDIO_DIR, directory), filename)
+            else:
+                return send_from_directory(AUDIO_DIR, filename)
+        else:
+            app.logger.error(f"Audio file not found: {full_audio_path}")
+            abort(404)
+            
     except Exception as e:
         app.logger.error(f"Error serving audio file: {str(e)}")
         app.logger.error(traceback.format_exc())
@@ -456,19 +500,41 @@ def browse_dialog():
 def get_root_directories():
     """Get a list of root directories to browse from"""
     try:
-        # Common paths to check
-        common_paths = [
-            '/',
-            '/home',
-            '/mnt',
-            '/media',
-            '/data',
-            '/opt',
-            '/var',
-            '/usr/local',
-            os.path.expanduser('~'),  # Home directory
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Project root
-        ]
+        # Common paths to check - different for Windows vs Unix
+        import platform
+        if platform.system() == 'Windows':
+            # Windows paths
+            common_paths = [
+                'C:\\',
+                'D:\\',
+                'E:\\',
+                'F:\\',
+                os.path.expanduser('~'),  # Home directory
+                os.path.join(os.path.expanduser('~'), 'Documents'),
+                os.path.join(os.path.expanduser('~'), 'Desktop'),
+                os.path.dirname(os.path.abspath(__file__))  # Project root
+            ]
+            # Add all available drives
+            import string
+            for drive in string.ascii_uppercase:
+                drive_path = f"{drive}:\\"
+                if os.path.exists(drive_path):
+                    if drive_path not in common_paths:
+                        common_paths.append(drive_path)
+        else:
+            # Unix/Linux paths
+            common_paths = [
+                '/',
+                '/home',
+                '/mnt',
+                '/media',
+                '/data',
+                '/opt',
+                '/var',
+                '/usr/local',
+                os.path.expanduser('~'),  # Home directory
+                os.path.dirname(os.path.abspath(__file__))  # Project root
+            ]
         
         # Filter to only paths that exist and are accessible
         available_paths = []
@@ -562,7 +628,9 @@ def stats():
                     stats['rttm_count'] += 1
                     # Get category (top-level directory)
                     rel_path = os.path.relpath(root, RTTM_DIR)
-                    category = rel_path.split(os.sep)[0] if rel_path != '.' else 'root'
+                    # Normalize path separators for cross-platform compatibility
+                    normalized_path = rel_path.replace('\\', '/').replace('/', os.sep)
+                    category = normalized_path.split(os.sep)[0] if normalized_path != '.' else 'root'
                     
                     if category not in stats['categories']:
                         stats['categories'][category] = {'rttm': 0, 'audio': 0, 'labels': 0}
@@ -576,7 +644,9 @@ def stats():
                     stats['audio_count'] += 1
                     # Get category (top-level directory)
                     rel_path = os.path.relpath(root, AUDIO_DIR)
-                    category = rel_path.split(os.sep)[0] if rel_path != '.' else 'root'
+                    # Normalize path separators for cross-platform compatibility
+                    normalized_path = rel_path.replace('\\', '/').replace('/', os.sep)
+                    category = normalized_path.split(os.sep)[0] if normalized_path != '.' else 'root'
                     
                     if category not in stats['categories']:
                         stats['categories'][category] = {'rttm': 0, 'audio': 0, 'labels': 0}
@@ -590,7 +660,9 @@ def stats():
                     stats['label_count'] += 1
                     # Get category (top-level directory)
                     rel_path = os.path.relpath(root, LABELS_DIR)
-                    category = rel_path.split(os.sep)[0] if rel_path != '.' else 'root'
+                    # Normalize path separators for cross-platform compatibility
+                    normalized_path = rel_path.replace('\\', '/').replace('/', os.sep)
+                    category = normalized_path.split(os.sep)[0] if normalized_path != '.' else 'root'
                     
                     if category not in stats['categories']:
                         stats['categories'][category] = {'rttm': 0, 'audio': 0, 'labels': 0}
